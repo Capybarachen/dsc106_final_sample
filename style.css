@@ -766,8 +766,16 @@ button:hover {
 
 #mapTooltip {
   position: fixed;
-  z-index: 500;
+  z-index: 2000;
   line-height: 1.5;
+  padding: .55rem .8rem;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .82);
+  color: #fff;
+  font-size: 12.5px;
+  pointer-events: none;
+  max-width: 220px;
+  box-shadow: 0 3px 10px rgba(0,0,0,.25);
 }
 
 #mapView,
