@@ -119,8 +119,14 @@ function loadData() {
       drawSlide3Chart(data.filter(d => d.year >= s && d.year <= e));
     }
 
-    startSlider.addEventListener("input", redraw);
-    endSlider.addEventListener("input", redraw);
+    startSlider.addEventListener("input", function() {
+      if (+this.value >= +endSlider.value) this.value = +endSlider.value - 1;
+      redraw();
+    });
+    endSlider.addEventListener("input", function() {
+      if (+this.value <= +startSlider.value) this.value = +startSlider.value + 1;
+      redraw();
+    });
     redraw();
 
     initStateMapSlide(stateData, usGeo);
@@ -486,6 +492,7 @@ function drawStateComboChart(data, stateName) {
 function drawSlide3Chart(data) {
   const svg = d3.select("#slide3Chart"); svg.selectAll("*").remove();
   const { w, h, m } = box(svg, 900, 430);
+  m.left = 82;
   const x = d3.scaleLinear().domain(d3.extent(data, (d) => d.year)).range([m.left, w - m.right]);
   const y = d3.scaleLinear().domain(d3.extent(data, (d) => d.tas_anomaly)).nice().range([h - m.bottom, m.top]);
   const zero = y(0);
@@ -512,7 +519,12 @@ function drawSlide3Chart(data) {
     .attr("x1", m.left).attr("x2", w - m.right).attr("y1", zero).attr("y2", zero)
     .attr("stroke", "#333").attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
 
-  label(svg, "Temperature anomaly relative to 1850–1900 baseline", m.left, m.top - 10);
+  label(svg, "Year", w / 2, h - 8, "middle");
+  svg.append("text").attr("class", "chart-label")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(h / 2)).attr("y", 14)
+    .attr("text-anchor", "middle")
+    .text("Temperature Anomaly (°C)");
 }
 
 function drawSlide4Chart(data) {
@@ -534,7 +546,12 @@ function drawSlide4Chart(data) {
     svg.append("path").datum(s.values).attr("class", "line").attr("stroke", s.color).attr("d", lineGen)
   );
   legend(svg, series, m.left, m.top - 18);
-  label(svg, "Normalized (0–1 within each variable)", m.left, m.top + 22);
+  label(svg, "Year", w / 2, h - 8, "middle");
+  svg.append("text").attr("class", "chart-label")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(h / 2)).attr("y", 16)
+    .attr("text-anchor", "middle")
+    .text("Normalized Value (0–1)");
   svg.append("rect")
     .attr("x", m.left).attr("y", m.top)
     .attr("width", w - m.left - m.right).attr("height", h - m.top - m.bottom)

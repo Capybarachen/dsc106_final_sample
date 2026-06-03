@@ -1,12 +1,115 @@
 let slide6AnnualData = [];
+let slide6TempData = [];
 let slide6CoefData = [];
+let slide6MapFeatures = [];
+let slide6MapReady = false;
+let slide6HoveredStatePath = null;
+let slide6LastPointerEvent = null;
+
+const slide6MapMetric = {
+  label: "Average tas_c",
+  units: "°C",
+  colorDomain: [-5, 10, 25],
+  colorRange: ["#2563eb", "#f8fafc", "#dc2626"],
+  getValues(start, end) {
+    return d3.rollup(
+      slide6TempData.filter(
+        d => d.year >= start && d.year <= end && Number.isFinite(d.tas_c)
+      ),
+      rows => d3.mean(rows, d => d.tas_c),
+      d => d.state
+    );
+  },
+  format(value) {
+    return Number.isFinite(value) ? `${value.toFixed(1)} °C` : "—";
+  },
+  getColorScale() {
+    return d3.scaleLinear()
+      .domain(this.colorDomain)
+      .range(this.colorRange)
+      .clamp(true);
+  },
+};
+
+const slide6StateFips = {
+  "01": "Alabama",
+  "02": "Alaska",
+  "04": "Arizona",
+  "05": "Arkansas",
+  "06": "California",
+  "08": "Colorado",
+  "09": "Connecticut",
+  "10": "Delaware",
+  "11": "District of Columbia",
+  "12": "Florida",
+  "13": "Georgia",
+  "15": "Hawaii",
+  "16": "Idaho",
+  "17": "Illinois",
+  "18": "Indiana",
+  "19": "Iowa",
+  "20": "Kansas",
+  "21": "Kentucky",
+  "22": "Louisiana",
+  "23": "Maine",
+  "24": "Maryland",
+  "25": "Massachusetts",
+  "26": "Michigan",
+  "27": "Minnesota",
+  "28": "Mississippi",
+  "29": "Missouri",
+  "30": "Montana",
+  "31": "Nebraska",
+  "32": "Nevada",
+  "33": "New Hampshire",
+  "34": "New Jersey",
+  "35": "New Mexico",
+  "36": "New York",
+  "37": "North Carolina",
+  "38": "North Dakota",
+  "39": "Ohio",
+  "40": "Oklahoma",
+  "41": "Oregon",
+  "42": "Pennsylvania",
+  "44": "Rhode Island",
+  "45": "South Carolina",
+  "46": "South Dakota",
+  "47": "Tennessee",
+  "48": "Texas",
+  "49": "Utah",
+  "50": "Vermont",
+  "51": "Virginia",
+  "53": "Washington",
+  "54": "West Virginia",
+  "55": "Wisconsin",
+  "56": "Wyoming",
+};
 
 function initSlide6() {
   Promise.all([
     d3.csv("state_annual_climate.csv", d3.autoType),
     d3.csv("state_regression_coefficients.csv", d3.autoType),
-  ]).then(([annualRows, coefRows]) => {
-    slide6AnnualData = annualRows.filter(
+    d3.json("https://cdn.jsdelivr.net/npm/us-atlas@3/states-albers-10m.json").catch(() => null),
+  ]).then(([annualRows, coefRows, usMap]) => {
+    const co2ByYear = d3.rollup(
+      annualRows.filter(d => Number.isFinite(d.co2_ppm)),
+      rows => d3.median(rows, d => d.co2_ppm),
+      d => d.year
+    );
+
+    const rowsWithImputedCo2 = annualRows.map(d => ({
+      ...d,
+      co2_ppm: Number.isFinite(d.co2_ppm) ? d.co2_ppm : co2ByYear.get(d.year),
+    }));
+
+    slide6TempData = annualRows.filter(
+      d =>
+        d.year >= 1960 &&
+        d.year <= 2014 &&
+        Number.isFinite(d.tas_c)
+    );
+
+    slide6AnnualData = rowsWithImputedCo2.filter(
       d =>
         d.year >= 1960 &&
         d.year <= 2014 &&
@@ -17,6 +120,7 @@ function initSlide6() {
     );
 
     slide6CoefData = coefRows;
+    slide6MapFeatures = getSlide6StateFeatures(usMap);
 
     const stateSelect = document.getElementById("slide6StateSelect");
     const states = slide6CoefData.map(d => d.state).sort();
@@ -31,6 +135,7 @@ function initSlide6() {
     document.getElementById("slide6StartYear").addEventListener("input", updateSlide6);
     document.getElementById("slide6EndYear").addEventListener("input", updateSlide6);
 
+    initSlide6Map();
     updateSlide6();
   });
 }
@@ -53,11 +158,18 @@ function updateSlide6() {
   fill.style.right = `${100 - pct(end)}%`;
 
   const coef = slide6CoefData.find(d => d.state === state);
+  const selectedAverageTemp = getSlide6AverageTemp(state, start, end);
   const stateRows = slide6AnnualData
     .filter(d => d.state === state && d.year >= start && d.year <= end)
     .sort((a, b) => a.year - b.year);
 
-  if (!coef || stateRows.length < 2) return;
+  document.getElementById("slide6AverageTemp").textContent = fmtSlide6AvgTemp(selectedAverageTemp);
+  updateSlide6Map(start, end, state);
+
+  if (!coef || stateRows.length < 2) {
+    d3.select("#slide6Chart").selectAll("*").remove();
+    return;
+  }
 
   const first = stateRows[0];
   const last = stateRows[stateRows.length - 1];
@@ -94,9 +206,244 @@ function updateSlide6() {
   drawSlide6Chart(chartRows);
 }
 
+function getSlide6StateFeatures(usMap) {
+  if (!usMap || typeof topojson === "undefined") return [];
+
+  return topojson
+    .feature(usMap, usMap.objects.states)
+    .features
+    .map(feature => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        name:
+          feature.properties?.name ||
+          slide6StateFips[String(feature.id).padStart(2, "0")] ||
+          String(feature.id),
+      },
+    }));
+}
+
+function getSlide6StateAverages(start, end) {
+  return slide6MapMetric.getValues(start, end);
+}
+
+function getSlide6AverageTemp(state, start, end) {
+  return d3.mean(
+    slide6TempData.filter(
+      d =>
+        d.state === state &&
+        d.year >= start &&
+        d.year <= end &&
+        Number.isFinite(d.tas_c)
+    ),
+    d => d.tas_c
+  );
+}
+
+function initSlide6Map() {
+  const svg = d3.select("#slide6Map");
+  svg.selectAll("*").remove();
+
+  const width = 975;
+  const height = 610;
+  svg
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
+    .on("click", event => event.stopPropagation())
+    .on("pointerdown", event => event.stopPropagation());
+
+  if (!slide6MapFeatures.length) {
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", height / 2)
+      .attr("text-anchor", "middle")
+      .attr("class", "chart-label")
+      .text("Map could not be loaded.");
+    return;
+  }
+
+  const path = d3.geoPath();
+
+  svg.append("g")
+    .attr("class", "state-map-layer")
+    .selectAll("path")
+    .data(slide6MapFeatures)
+    .join("path")
+    .attr("class", "state-map-path")
+    .attr("d", path)
+    .attr("transform", d => getSlide6StateTransform(d, path))
+    .on("mousemove", (event, d) => {
+      event.stopPropagation();
+      slide6HoveredStatePath = event.currentTarget;
+      slide6LastPointerEvent = event;
+      showSlide6StateTooltip(event, event.currentTarget);
+    })
+    .on("mouseleave", event => {
+      event.stopPropagation();
+      slide6HoveredStatePath = null;
+      slide6LastPointerEvent = null;
+      hideTooltip();
+    })
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      const name = d.properties.name;
+      if (!d3.select(event.currentTarget).classed("has-data")) return;
+      document.getElementById("slide6StateSelect").value = name;
+      updateSlide6();
+    });
+
+  slide6MapReady = true;
+}
+
+function getSlide6StateTransform(d, path) {
+  const name = d.properties.name;
+  const [[x0, y0], [x1, y1]] = path.bounds(d);
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+
+  if (name === "Alaska") {
+    const placement = { x: 140, y: 380, scale: 1.28, rotate: 0 };
+    return getSlide6PlacedTransform(cx, cy, placement);
+  }
+
+  if (name === "Hawaii") {
+    const placement = { x: 160, y: 510, scale: 1.75, rotate: 0 };
+    return getSlide6PlacedTransform(cx, cy, placement);
+  }
+
+  return "translate(115,0)";
+}
+
+function getSlide6PlacedTransform(cx, cy, placement) {
+  const tx = placement.x - placement.scale * cx;
+  const ty = placement.y - placement.scale * cy;
+  return `translate(${tx},${ty}) scale(${placement.scale}) rotate(${placement.rotate},${cx},${cy})`;
+}
+
+function updateSlide6Map(start, end, selectedState) {
+  if (!slide6MapReady) {
+    initSlide6Map();
+  }
+
+  if (!slide6MapFeatures.length) return;
+
+  const averages = getSlide6StateAverages(start, end);
+  const color = slide6MapMetric.getColorScale();
+  const availableStates = new Set(slide6CoefData.map(d => d.state));
+
+  d3.select("#slide6Map")
+    .selectAll(".state-map-path")
+    .each(d => {
+      d.properties.slide6AverageTemp = averages.get(d.properties.name);
+    })
+    .attr("class", d => {
+      const name = d.properties.name;
+      const avg = averages.get(name);
+      return [
+        "state-map-path",
+        Number.isFinite(avg) ? "has-temp" : "no-temp",
+        availableStates.has(name) ? "has-data" : "no-data",
+        name === selectedState ? "selected" : "",
+      ].join(" ");
+    })
+    .attr("fill", d => {
+      const avg = averages.get(d.properties.name);
+      return Number.isFinite(avg) ? color(avg) : "#e5e7eb";
+    });
+
+  drawSlide6MapLegend(color, start, end);
+
+  if (slide6HoveredStatePath && slide6LastPointerEvent) {
+    showSlide6StateTooltip(slide6LastPointerEvent, slide6HoveredStatePath);
+  }
+}
+
+function showSlide6StateTooltip(event, statePath) {
+  const state = d3.select(statePath);
+  const d = state.datum();
+  const avg = d.properties.slide6AverageTemp;
+  const value = Number.isFinite(avg) ? slide6MapMetric.format(avg) : "No temperature data";
+  const modelNote = state.classed("has-data")
+    ? "Click to select"
+    : "No regression model for this state yet";
+
+  showTooltip(
+    event,
+    `<strong>${d.properties.name}</strong><br>Average temperature: ${value}<br>${modelNote}`
+  );
+}
+
+function drawSlide6MapLegend(color, start, end) {
+  const svg = d3.select("#slide6Map");
+  svg.selectAll(".slide6-map-legend").remove();
+
+  const domain = slide6MapMetric.colorDomain;
+  const width = 240;
+  const height = 10;
+  const x = 975 - width - 28;
+  const y = 560;
+  const defs = svg.select("defs").empty() ? svg.append("defs") : svg.select("defs");
+  const gradient = defs.select("#slide6MapGradient").empty()
+    ? defs.append("linearGradient").attr("id", "slide6MapGradient")
+    : defs.select("#slide6MapGradient");
+
+  gradient
+    .attr("x1", "0%")
+    .attr("x2", "100%")
+    .attr("y1", "0%")
+    .attr("y2", "0%");
+
+  gradient.selectAll("stop")
+    .data(d3.range(0, 1.01, 0.1))
+    .join("stop")
+    .attr("offset", d => `${d * 100}%`)
+    .attr("stop-color", d => color(domain[0] + d * (domain[2] - domain[0])));
+
+  const legend = svg.append("g")
+    .attr("class", "slide6-map-legend")
+    .attr("transform", `translate(${x},${y})`);
+
+  legend.append("rect")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("rx", 5)
+    .attr("fill", "url(#slide6MapGradient)");
+
+  legend.append("text")
+    .attr("class", "chart-label")
+    .attr("x", 0)
+    .attr("y", -8)
+    .text(`${slide6MapMetric.label}, ${start}-${end} fixed scale`);
+
+  legend.append("text")
+    .attr("class", "chart-label")
+    .attr("x", 0)
+    .attr("y", 27)
+    .text(slide6MapMetric.format(domain[0]));
+
+  legend.append("text")
+    .attr("class", "chart-label")
+    .attr("x", width / 2)
+    .attr("y", 27)
+    .attr("text-anchor", "middle")
+    .text(slide6MapMetric.format(domain[1]));
+
+  legend.append("text")
+    .attr("class", "chart-label")
+    .attr("x", width)
+    .attr("y", 27)
+    .attr("text-anchor", "end")
+    .text(slide6MapMetric.format(domain[2]));
+}
+
 function fmtSlide6Temp(v) {
   const sign = v > 0 ? "+" : "";
   return `${sign}${v.toFixed(2)} °C`;
+}
+
+function fmtSlide6AvgTemp(v) {
+  return slide6MapMetric.format(v);
 }
 
 function drawSlide6Chart(data) {
