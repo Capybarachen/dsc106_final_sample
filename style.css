@@ -442,7 +442,28 @@ button:hover {
 
 .impact-grid b,
 .mini-metrics b {
-    color: #b91c1c
+    font-weight: 700;
+    font-variant-numeric: tabular-nums
+}
+
+.series-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    flex-shrink: 0
+}
+
+.legend-item {
+    cursor: pointer;
+    user-select: none;
+    transition: opacity .15s
+}
+
+.legend-item:hover {
+    opacity: .75
 }
 
 .chart-grid {
@@ -875,6 +896,14 @@ button:hover {
   font-size: 12.5px;
   pointer-events: none;
   max-width: 220px;
+  box-shadow: 0 3px 10px rgba(0,0,0,.25);
+}
+
+#tooltip {
+  position: fixed;
+  z-index: 2000;
+  line-height: 1.6;
+  max-width: 260px;
   box-shadow: 0 3px 10px rgba(0,0,0,.25);
 }
 
