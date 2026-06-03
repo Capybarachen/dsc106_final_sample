@@ -6,6 +6,7 @@
   <title>Temperature Changes in the United States</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 </head>
 <body>
   <div class="slides-container">
@@ -43,6 +44,36 @@
             <div class="slider-labels">
               <span id="startYearLabel">1850</span>
               <span id="endYearLabel">2014</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide scrollable">
+      <div class="slide-content">
+        <div class="slide-text compact-text">
+          <h2>Explore by State</h2>
+          <p>Click any state to see how its surface temperature relates to aerosol optical depth and CO&#8322; concentration over time (1950–2014).</p>
+        </div>
+        <div class="chart-container wide-card" style="position:relative">
+          <h3 id="stateMapHeading">Select a State</h3>
+          <button id="backToMapBtn">&#8592; Back to Map</button>
+          <div id="mapView">
+            <div class="map-year-control">
+              <span>Year: <strong id="mapYearLabel">1980</strong></span>
+              <input type="range" id="mapYearSlider" min="1950" max="2014" value="1980" step="1" />
+            </div>
+            <svg id="usMapSvg"></svg>
+          </div>
+          <div id="mapTooltip" class="tooltip hidden"></div>
+          <div id="stateDetailView">
+            <div id="stateOutlinePane">
+              <p id="stateOutlineLabel"></p>
+              <svg id="stateOutlineSvg"></svg>
+            </div>
+            <div id="stateChartsPane">
+              <svg id="stateComboChart"></svg>
             </div>
           </div>
         </div>
