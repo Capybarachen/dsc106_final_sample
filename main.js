@@ -97,7 +97,7 @@ function loadData() {
     d3.csv("state_annual_climate.csv", d => ({ year: +d.year, state: d.state, od550aer: +d.od550aer, co2_ppm: +d.co2_ppm, tas_c: +d.tas_c })),
     d3.json("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json")
   ]).then(([data, stateData, usGeo]) => {
-    drawSlide4Chart(data);
+
     initScrollyTelling(data);
     initStateMapSlide(stateData, usGeo);
   });
@@ -495,7 +495,7 @@ function drawStateComboChart(data, stateName) {
 
 function drawSlide3Chart(data) {
   const svg = d3.select("#slide3Chart");
-  const W = 900, H = 430, m = { top: 44, right: 28, bottom: 48, left: 64 };
+  const W = 900, H = 430, m = { top: 44, right: 28, bottom: 48, left: 82 };
   const isInit = !svg.select(".s3-bars").empty();
 
   if (!isInit) {
@@ -546,51 +546,6 @@ function drawSlide3Chart(data) {
         .attr("height", d => Math.abs(y(d.tas_anomaly) - zero))),
       exit => exit.call(e => e.transition(t).attr("x", W - m.right).remove())
     );
-}
-
-function drawSlide4Chart(data) {
-  const svg = d3.select("#slide4Chart");
-  const { w, h, m } = box(svg, 900, 430);
-  const x = d3.scaleLinear().domain(d3.extent(data, (d) => d.year)).range([m.left, w - m.right]);
-  const series = [
-    { key: "od550aer", label: "od550aer", color: "#f6ae2d" },
-    { key: "tas_c",    label: "temperature (°C)", color: "#e53935" },
-  ].map((s) => {
-    const sc = d3.scaleLinear().domain(d3.extent(data, (d) => d[s.key])).range([0, 1]);
-    return { ...s, values: data.map((d) => ({ year: d.year, value: sc(d[s.key]) })) };
-  });
-  const y = d3.scaleLinear().domain([0, 1]).range([h - m.bottom, m.top]);
-  axes(svg, x, y, w, h, m, true);
-  const lineGen = d3.line().x((d) => x(d.year)).y((d) => y(d.value)).curve(d3.curveMonotoneX);
-  const bisect = d3.bisector((d) => d.year).left;
-  const paths = series.map((s) =>
-    svg.append("path").datum(s.values).attr("class", "line").attr("stroke", s.color).attr("d", lineGen)
-  );
-  legend(svg, series, m.left, m.top - 18);
-  label(svg, "Year", w / 2, h - 8, "middle");
-  svg.append("text").attr("class", "chart-label")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -(h / 2)).attr("y", 16)
-    .attr("text-anchor", "middle")
-    .text("Normalized Value (0–1)");
-  svg.append("rect")
-    .attr("x", m.left).attr("y", m.top)
-    .attr("width", w - m.left - m.right).attr("height", h - m.top - m.bottom)
-    .attr("fill", "none").attr("pointer-events", "all")
-    .on("mousemove", function (event) {
-      const [mx, my] = d3.pointer(event);
-      const year = x.invert(mx);
-      let minDist = Infinity, closestIdx = 0;
-      series.forEach((s, i) => {
-        const idx = bisect(s.values, year, 1);
-        const d0 = s.values[idx - 1], d1 = s.values[idx];
-        const val = d1 ? d0.value + (year - d0.year) / (d1.year - d0.year) * (d1.value - d0.value) : d0.value;
-        const dist = Math.abs(my - y(val));
-        if (dist < minDist) { minDist = dist; closestIdx = i; }
-      });
-      paths.forEach((p, i) => p.attr("stroke-width", i === closestIdx ? 4 : 1.5).attr("opacity", i === closestIdx ? 1 : 0.2));
-    })
-    .on("mouseleave", () => paths.forEach((p) => p.attr("stroke-width", null).attr("opacity", null)));
 }
 
 // D3 chart helpers
