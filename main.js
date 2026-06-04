@@ -343,12 +343,12 @@ function computeStateSummaries(stateData) {
 
     if (data.length < 6) return;
 
-    const first = data.slice(0, WINDOW);
-    const last = data.slice(-WINDOW);
+    const first = data[0];
+    const last = data[data.length - 1];
 
-    const deltaTemp = mean(last, "tas_c") - mean(first, "tas_c");
-    const deltaAod = mean(last, "od550aer") - mean(first, "od550aer");
-    const deltaCo2 = mean(last, "co2_ppm") - mean(first, "co2_ppm");
+    const deltaTemp = last.tas_c - first.tas_c;
+    const deltaAod = last.od550aer - first.od550aer;
+    const deltaCo2 = last.co2_ppm - first.co2_ppm;
 
     summaries.push({
       state,
@@ -783,7 +783,7 @@ function renderStateSummary(s) {
     </div>
 
     <p class="summary-note">
-      Δ = average of 2012–2014 minus average of 1960–1962.
+      Δ = 2014 value minus 1960 value.
     </p>
   `;
 }
